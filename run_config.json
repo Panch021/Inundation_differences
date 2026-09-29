@@ -1,0 +1,45 @@
+{
+  "reference_path": "/var/folders/0p/m06l02_90y16lvwxml_tw5dh0000gr/T/nrmse_uploads/48323a4357bd47eda301826f54f0b395/Maximums_CotoN_10m.nc",
+  "reference_label": "CotoN_10m",
+  "prediction_paths": [
+    "/var/folders/0p/m06l02_90y16lvwxml_tw5dh0000gr/T/nrmse_uploads/baf1d6aef114419688f6aa5bbf2f61cc/Maximums_CotoN_15m.nc",
+    "/var/folders/0p/m06l02_90y16lvwxml_tw5dh0000gr/T/nrmse_uploads/d744c9e498f94529af1a7f148f8eeb47/Maximums_CotoN_20m.nc",
+    "/var/folders/0p/m06l02_90y16lvwxml_tw5dh0000gr/T/nrmse_uploads/91dec04e52824da5b435cd79ddd1e4a6/Maximums_CotoN_30m.nc"
+  ],
+  "prediction_labels": [
+    "CotoN_15m",
+    "CotoN_20m",
+    "CotoN_30m"
+  ],
+  "prediction_colors": [
+    "#1f3fd1",
+    "#8fe36b",
+    "#e3a33b"
+  ],
+  "variables": [
+    "max_depth",
+    "max_speed",
+    "max_solids_frac",
+    "impact_pressure",
+    "max_erosion",
+    "inundation_time"
+  ],
+  "depth_threshold": 0.03,
+  "time_depth_mask": true,
+  "mask_mode": "intersection",
+  "normalization": "p1p99",
+  "resampling": "nearest",
+  "grid_resolution": null,
+  "rho_solid": 2000.0,
+  "rho_water": 1000.0,
+  "gravity": 9.81,
+  "default_epsg": 32717,
+  "axis_max": null,
+  "tick_step": null,
+  "center_offset": 1.0,
+  "chart_title": "Cotopaxi Norte - NRMSE",
+  "show_legend": true,
+  "chart_dpi": 300,
+  "output_dir": "/Users/franciscovasconez/Documents/IG/RESEARCH/python_examples/kestrel_post/CotoN",
+  "run_time": "2026-09-29T15:10:37"
+}
