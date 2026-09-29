@@ -108,6 +108,7 @@ import xarray as xr
 import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt                       # noqa: E402
+from matplotlib.colors import is_color_like, to_hex    # noqa: E402
 from matplotlib.lines import Line2D                   # noqa: E402
 
 
@@ -174,6 +175,25 @@ RESAMPLING_MAP = {"bilinear": Resampling.bilinear, "nearest": Resampling.nearest
                   "average": Resampling.average, "cubic": Resampling.cubic}
 PALETTE = ["#1f3fd1", "#8fe36b", "#e3a33b", "#c0392b", "#8e44ad", "#17a2b8",
            "#6d4c41", "#e84393", "#2d3436", "#b8b814"]
+# colour picker in the dashboard (rows of swatches, like a standard colour menu)
+SWATCH_ROWS = [
+    ("Default", PALETTE),
+    ("Bright", ["#ff0000", "#ff8000", "#ffd700", "#7fff00", "#00b050",
+                "#00bfff", "#0000ff", "#8000ff", "#ff00ff", "#8b4513"]),
+    ("Standard", ["#000000", "#7f7f7f", "#a6cee3", "#1f78b4", "#b2df8a",
+                  "#33a02c", "#fb9a99", "#e31a1c", "#fdbf6f", "#ff7f00"]),
+]
+
+
+def resolve_color(value, fallback: str) -> tuple[str, bool]:
+    """Colour typed by the user (hex '#1f3fd1', name 'red', 'tab:blue', ...) ->
+    (hex, ok). Blank or invalid -> (fallback, False)."""
+    v = (value or "").strip()
+    if v and not v.startswith("#") and re.fullmatch(r"[0-9a-fA-F]{6}", v):
+        v = "#" + v                                    # 1f3fd1 -> #1f3fd1
+    if v and is_color_like(v):
+        return to_hex(v), True
+    return fallback, False
 
 
 # -----------------------------------------------------------------------------
@@ -666,8 +686,14 @@ def run_nrmse(cfg: Config, log=print, progress=None) -> dict:
     labels = [(labels[i].strip() if i < len(labels) and labels[i] and labels[i].strip()
                else default_label(p, used)) for i, p in enumerate(pred_paths)]
     colors_in = list(cfg.prediction_colors or [])
-    colors = [(colors_in[i] if i < len(colors_in) and colors_in[i] else PALETTE[i % len(PALETTE)])
-              for i in range(n)]
+    colors = []
+    for i in range(n):
+        raw = colors_in[i] if i < len(colors_in) else None
+        col, ok = resolve_color(raw, PALETTE[i % len(PALETTE)])
+        if raw and not ok:
+            log(f"WARNING: colour '{raw}' not recognised for prediction {i + 1} "
+                f"→ using {col}")
+        colors.append(col)
 
     def load(path, label):
         run = read_maximums(path, label, thr, cfg.default_epsg)
@@ -932,6 +958,14 @@ def build_app(cfg0: Config):
     SMALL = {"fontSize": "12px", "marginTop": "4px", "color": "#1f4e8c"}
     files = _candidate_files()
 
+    SWATCH = {"width": "18px", "height": "18px", "padding": 0, "cursor": "pointer",
+              "border": "1px solid #9aa1ad", "borderRadius": "3px"}
+
+    def preview_style(col, ok=True):
+        return {"width": "30px", "minWidth": "30px", "borderRadius": "6px",
+                "border": "1px solid #c5cad3" if ok else "2px solid #b42318",
+                "background": col}
+
     def pred_slot(i: int, pos: int):
         return html.Div(id={"type": "slot", "index": i}, className="pred-slot",
                         style=dict(SLOT, order=pos), children=[
@@ -958,8 +992,23 @@ def build_app(cfg0: Config):
                 dcc.Input(id={"type": "pred-label", "index": i}, placeholder="Label (e.g. 15 m)",
                           style=dict(INP, flex="3")),
                 dcc.Input(id={"type": "pred-color", "index": i},
-                          placeholder=PALETTE[pos % len(PALETTE)], debounce=True,
-                          style=dict(INP, flex="2"))]),
+                          placeholder="colour: red, blue, #1f3fd1…", debounce=True,
+                          style=dict(INP, flex="2")),
+                html.Div(id={"type": "color-preview", "index": i},
+                         title="Colour used in the chart",
+                         style=preview_style(PALETTE[pos % len(PALETTE)]))]),
+            html.Details(style={"marginTop": "4px"}, children=[
+                html.Summary("Pick a colour", style={"fontSize": "12px", "cursor": "pointer",
+                                                     "color": "#1f4e8c"}),
+                html.Div(style={"marginTop": "4px"}, children=[
+                    html.Div(style={"display": "flex", "alignItems": "center",
+                                    "gap": "3px", "marginBottom": "3px"}, children=[
+                        html.Span(name, style={"fontSize": "10.5px", "color": "#5b6573",
+                                               "width": "52px"})] + [
+                        html.Button("", id={"type": "swatch", "index": i, "c": col},
+                                    n_clicks=0, title=col, style=dict(SWATCH, background=col))
+                        for col in cols])
+                    for name, cols in SWATCH_ROWS])]),
             dcc.Store(id={"type": "pred-store", "index": i}),
         ])
 
@@ -1215,6 +1264,24 @@ def build_app(cfg0: Config):
         if info.get("warning"):
             status.append(html.Div(f"⚠ {info['warning']}", style={"color": "#9a5b00"}))
         return {"path": path}, status, (label or default_label(path))
+
+    # ---- colour picker ---------------------------------------------------------
+    @app.callback(Output({"type": "pred-color", "index": MATCH}, "value"),
+                  Input({"type": "swatch", "index": MATCH, "c": ALL}, "n_clicks"),
+                  prevent_initial_call=True)
+    def pick_swatch(clicks):
+        if not ctx.triggered_id or not any(clicks or []):
+            return no_update
+        return ctx.triggered_id["c"]
+
+    @app.callback(Output({"type": "color-preview", "index": MATCH}, "style"),
+                  Input({"type": "pred-color", "index": MATCH}, "value"),
+                  State("pred-order", "data"), prevent_initial_call=True)
+    def show_color(value, order):
+        i = ctx.triggered_id["index"] if ctx.triggered_id else 0
+        pos = (order or []).index(i) if i in (order or []) else 0
+        col, ok = resolve_color(value, PALETTE[pos % len(PALETTE)])
+        return preview_style(col, ok or not (value or "").strip())
 
     # ---- helpers --------------------------------------------------------------
     def chart_cfg(amax, tstep, coff, title, legend, dpi) -> Config:
